@@ -1,0 +1,13 @@
+[package]
+name = "uorb-codec"
+version = "0.1.0"
+authors = ["Todd Stellanova"]
+edition = "2018"
+build = "build/main.rs"
+
+
+[build-dependencies]
+quote = "0.6"
+lazy_static = "1.2.0"
+
+[dependencies]
