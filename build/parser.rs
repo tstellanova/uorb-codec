@@ -9,6 +9,7 @@ use proc_macro2::{Delimiter, Group, Ident, Literal, Span, TokenStream};
 use std::default::Default;
 use std::io::{Read, Write, BufRead, BufReader};
 
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum UorbFieldType {
     Bool,
@@ -133,7 +134,7 @@ impl ToTokens for UorbMsgField {
         //TODO description?
 
         let toks = quote!(
-        #name: #rust_type,
+        pub #name: #rust_type,
         );
         tokens.append_all(toks);
     }
@@ -291,14 +292,17 @@ impl ToTokens for UorbMsg {
         let name =  self.name.clone();
         let name:Ident = Ident::new(&name, Span::call_site());
 
-
+        //TODO implement eg Default
         let toks = quote!(
+        #[derive(Debug, Clone, PartialEq)]
         pub struct #name {
             #field_defs
         }
+
         impl #name {
             #consts
         }
+
         );
         tokens.append_all(toks);
     }
@@ -319,25 +323,7 @@ pub fn generate<R: Read, W: Write>(name: String, input: &mut R, output_rust: &mu
     println!("rust_src: {:?}", rust_src);
     let mut cfg = rustfmt::config::Config::default();
     cfg.set().write_mode(rustfmt::config::WriteMode::Display);
-    let _res = rustfmt::format_input(rustfmt::Input::Text(rust_src), &cfg, Some(output_rust));
-
-//    let res = output_rust.write(rust_src.into_bytes().as_slice());
+    rustfmt::format_input(rustfmt::Input::Text(rust_src), &cfg, Some(output_rust)).unwrap();
     output_rust.flush().unwrap();
-//    match res {
-//        Ok(written) => {
-//            println!("wrote: {:?}", written);
-//        },
-//        Err(e) => {
-//            println!("wrong: {:?}", e);
-//        }
-//    }
-
-
-//    let mut cfg = rustfmt::config::Config::default();
-//    cfg.set().write_mode(rustfmt::config::WriteMode::Display);
-//    rustfmt::format_input(rustfmt::Input::Text(rust_src), &cfg, Some(output_rust)).unwrap();
-
-
-
 
 }
