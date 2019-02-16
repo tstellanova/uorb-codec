@@ -1,4 +1,10 @@
 
+extern crate proc_macro2;
+
+
+
+use quote::{ ToTokens, TokenStreamExt};
+use proc_macro2::{Delimiter, Group, Ident, Literal, Span, TokenStream};
 
 use std::default::Default;
 use std::io::{Read, Write, BufRead, BufReader};
@@ -36,8 +42,7 @@ impl UorbFieldType {
             "int64" => Some(Int64),
             "float32" => Some(Float32),
             "float64" => Some(Float64),
-            _ => {
-                //Array fields:
+            _ => { //Array fields
                 if s.ends_with("]") {
                     let start = s.find("[").unwrap();
                     let size = s[start + 1..(s.len() - 1)].parse::<usize>().unwrap();
@@ -47,6 +52,34 @@ impl UorbFieldType {
                     panic!("UNHANDLED {:?}", s);
                 }
             }
+        }
+    }
+
+    /// Return rust equivalent of a given UorbFieldType
+    pub fn rust_type(&self) -> String {
+        use self::UorbFieldType::*;
+        match self.clone() {
+            Bool => "bool".into(),
+            Char => "char".into(),
+            UInt8 => "u8".into(),
+            Int8 => "i8".into(),
+            UInt16 => "u16".into(),
+            Int16 => "i16".into(),
+            UInt32 => "u32".into(),
+            Int32 => "i32".into(),
+            Float32 => "f32".into(),
+            UInt64 => "u64".into(),
+            Int64 => "i64".into(),
+            Float64 => "f64".into(),
+            Array(t, size) => {
+                if size > 32 {
+                    // we have to use a vector to make our lives easier
+                    format!("Vec<{}> /* {} elements */", t.rust_type(), size)
+                } else {
+                    // use a slice, as Rust derives lot of things for slices <= 32 elements
+                    format!("[{};{}]", t.rust_type(), size)
+                }
+            },
         }
     }
 
@@ -63,30 +96,70 @@ impl Default for UorbFieldType {
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct UorbMsgField {
     pub uorbtype: UorbFieldType,
-    pub name: Option<String>,
+    pub name: String,
     pub description: Option<String>,
-    pub const_val: Option<String>,
 }
 
 impl UorbMsgField {
     pub fn from_line(desc: String, comment: Option<String>) -> Option<UorbMsgField> {
-        let mut field_desc:String ;
-        let mut const_val:Option<String> = None;
+        let field_desc = desc.trim().to_string() ;
 
-        let assign_split:Vec<&str> = desc.split("=").collect();
-        if assign_split.len() > 1 {
-            field_desc = assign_split[0].to_string();
-            const_val = Some(assign_split[1].to_string());
-        }
-        else {
-            field_desc = desc;
-        }
-
-        println!("field_desc: {:?} const_val: {:?}", field_desc, const_val);
 
         let toks:Vec<&str> = field_desc.split_whitespace().collect();
         if toks.len() < 2 {
             //invalid field type description
+            return None;
+        }
+        //println!("field_desc: {:?} ", field_desc);
+
+        let ftype: UorbFieldType = UorbFieldType::parse_type(toks[0]).unwrap();
+        let fname = toks[1];
+
+        Some(UorbMsgField {
+            uorbtype: ftype,
+            name: fname.to_string(),
+            description: comment,
+        })
+    }
+}
+
+impl ToTokens for UorbMsgField {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let name = self.name.clone();
+        let name:Ident = Ident::new(&name, Span::call_site());
+
+        let rust_type: String = self.uorbtype.rust_type();
+        let rust_type: Ident = Ident::new(&rust_type, Span::call_site());
+        //TODO description?
+
+        let toks = quote!(
+        #name: #rust_type,
+        );
+        tokens.append_all(toks);
+    }
+}
+
+
+
+
+#[derive(Debug, PartialEq, Clone, Default)]
+pub struct UorbMsgConst {
+    pub uorbtype: UorbFieldType,
+    pub name: Option<String>,
+    pub const_val: Option<String>,
+    pub description: Option<String>,
+}
+
+impl UorbMsgConst {
+    pub fn from_line(assign_split: Vec<&str>,  comment: Option<String>) -> Option<UorbMsgConst> {
+        let const_desc = assign_split[0].trim().to_string();
+        let const_val:Option<String> = Some(assign_split[1].trim().to_string());
+
+//        println!("const desc: {:?} const_val: {:?}", const_desc, const_val);
+
+        let toks:Vec<&str> = const_desc.split_whitespace().collect();
+        if toks.len() < 2 {
+            //invalid const type description
             return None;
         }
 
@@ -94,40 +167,50 @@ impl UorbMsgField {
         let fname = toks[1];
 
         Some(
-        UorbMsgField {
-            uorbtype: ftype,
-            name: Some(fname.to_string()),
-            description: comment,
-            const_val: const_val
-        })
+            UorbMsgConst {
+                uorbtype: ftype,
+                name: Some(fname.to_string()),
+                description: comment,
+                const_val: const_val
+            })
     }
 }
 
-//
-//#[derive(Debug, PartialEq, Clone, Default)]
-//pub struct UorbEnumEntry {
-//    pub value: Option<i32>,
-//    pub name: String,
-//    pub description: Option<String>,
-//}
+impl ToTokens for UorbMsgConst {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
+        let name = self.name.clone().unwrap();
+        let name:Ident = Ident::new(&name, Span::call_site());
 
+        let rust_type: String = self.uorbtype.rust_type();
+        let rust_type: Ident = Ident::new(&rust_type, Span::call_site());
 
+        let val = self.const_val.clone().unwrap();
+        let val:TokenStream = val.parse().unwrap();
+
+        let toks = quote!(
+        pub const #name: #rust_type = #val;
+        );
+        tokens.append_all(toks);
+    }
+}
 
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct UorbMsg {
-    pub name: Option<String>,
+    pub name: String,
     pub description: Option<String>,
     pub fields: Vec<UorbMsgField>,
+    pub consts: Vec<UorbMsgConst>,
     pub topics: Vec<String>,
 }
 
 
 impl UorbMsg {
-    pub fn from_lines<R: Read>(input: &mut R) -> UorbMsg  {
+    pub fn from_lines<R: Read>(name: String, input: &mut R) -> UorbMsg  {
         let mut msg: UorbMsg = UorbMsg {
-            name: None,
+            name: name,
             description: None,
             fields: vec![],
+            consts: vec![],
             topics: vec![],
         };
 
@@ -136,10 +219,12 @@ impl UorbMsg {
 
         for line in buf_reader.lines() {
             let line = line.unwrap();
+//            println!("line: {:?}",line);
             if let Some(_hash_pos) = line.find('#') {
                 let comment_split:Vec<&str> = line.split("#").collect();
                 match comment_split.len() {
                     1 => { //all comment, as in a TOPICS line
+                        println!("all comment: {:?}", comment_split);
                         let topics_exist:Vec<&str> = comment_split[0].split("TOPICS").collect();
                         if topics_exist.len() > 0 {
                             let topics:Vec<&str> = topics_exist[0].split_whitespace().collect();
@@ -151,10 +236,17 @@ impl UorbMsg {
                             println!("Comment? {:?}", line);
                         }
                     },
-                    2 => { // half field, half comment
+                    2 => { // half field, half comment]
+//                        println!("halfsies: {:?}", comment_split);
                         let field_desc = comment_split[0].to_string();
                         let comment =  comment_split[1].to_string();
-                        if let Some(field) = UorbMsgField::from_line(field_desc, Some(comment)) {
+                        let assign_split:Vec<&str> = field_desc.split('=').collect();
+                        if assign_split.len() > 1 {
+                            if let Some(constant) = UorbMsgConst::from_line(assign_split, Some(comment)) {
+                                msg.consts.push(constant);
+                            }
+                        }
+                        else if let Some(field) = UorbMsgField::from_line(field_desc, Some(comment)) {
                             msg.fields.push(field);
                         }
                     },
@@ -170,26 +262,82 @@ impl UorbMsg {
         msg
     }
 
+    /// Support for tokenizing
+
+    /// Emit rust consts
+    fn emit_constants(&self) -> TokenStream {
+        let mut lil_stream: TokenStream = TokenStream::new();
+        for item in self.consts.clone() {
+            item.to_tokens(&mut lil_stream);
+        }
+        lil_stream
+    }
+
+    fn emit_field_defs(&self) -> TokenStream {
+        let mut lil_stream: TokenStream = TokenStream::new();
+        for item in self.fields.clone() {
+            item.to_tokens(&mut lil_stream);
+        }
+        lil_stream
+    }
+
 }
 
+impl ToTokens for UorbMsg {
+     fn to_tokens(&self, tokens: &mut TokenStream) {
+        let consts = self.emit_constants();
+        let field_defs = self.emit_field_defs();
+
+        let name =  self.name.clone();
+        let name:Ident = Ident::new(&name, Span::call_site());
+
+
+        let toks = quote!(
+        pub struct #name {
+            #field_defs
+        }
+        impl #name {
+            #consts
+        }
+        );
+        tokens.append_all(toks);
+    }
+}
+
+
+
+
 /// Generate rust representation of uorb message, and corresponding conversion methods
-pub fn generate<R: Read, W: Write>(input: &mut R, _output_rust: &mut W) {
+pub fn generate<R: Read, W: Write>(name: String, input: &mut R, output_rust: &mut W) {
 
-    let msg:UorbMsg = UorbMsg::from_lines(input);
+    let msg:UorbMsg = UorbMsg::from_lines(name, input);
+//    println!("msg: {:?}", msg);
 
-    println!("msg: {:?}", msg);
+    let mut top_tokens = TokenStream::new();
+    msg.to_tokens(&mut top_tokens);
+    let rust_src = top_tokens.to_string();
+    println!("rust_src: {:?}", rust_src);
+    let mut cfg = rustfmt::config::Config::default();
+    cfg.set().write_mode(rustfmt::config::WriteMode::Display);
+    let _res = rustfmt::format_input(rustfmt::Input::Text(rust_src), &cfg, Some(output_rust));
+
+//    let res = output_rust.write(rust_src.into_bytes().as_slice());
+    output_rust.flush().unwrap();
+//    match res {
+//        Ok(written) => {
+//            println!("wrote: {:?}", written);
+//        },
+//        Err(e) => {
+//            println!("wrong: {:?}", e);
+//        }
+//    }
 
 
-//    let profile = parse_profile(input);
-//
-//    // rust file
-//    let rust_tokens = profile.emit_rust();
-//    //writeln!(output_rust, "{}", rust_tokens).unwrap();
-//
-//    let rust_src = rust_tokens.into_string();
 //    let mut cfg = rustfmt::config::Config::default();
 //    cfg.set().write_mode(rustfmt::config::WriteMode::Display);
 //    rustfmt::format_input(rustfmt::Input::Text(rust_src), &cfg, Some(output_rust)).unwrap();
+
+
 
 
 }

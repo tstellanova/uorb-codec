@@ -9,5 +9,10 @@ build = "build/main.rs"
 [build-dependencies]
 quote = "0.6"
 lazy_static = "1.2.0"
+proc-macro2 = "0.4.27"
+rustfmt = "0.9"
+
+
+
 
 [dependencies]
