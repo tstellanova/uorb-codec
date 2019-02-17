@@ -6,7 +6,6 @@ extern crate quote;
 use std::env;
 use std::fs::{self, File};
 use std::path::{Path};
-use heck::{CamelCase};
 
 //import the custom uORB message parser
 mod parser;
@@ -32,11 +31,9 @@ fn process_msg_directory(msg_dir: &Path, fout: &mut File )  -> std::io::Result<(
                 //println!("hit: {:?}", path);
                 let range: usize = fname.len()- msg_file_extension.len();
                 let name = fname[..range].to_string();
-                let converted_name = name.to_camel_case();
-                println!("msg name: {:?} converted: {:?}", name, converted_name);
 
                 let mut fin: File = File::open(path).unwrap();
-                parser::generate(converted_name, &mut fin, fout);
+                parser::generate(name, &mut fin, fout);
             }
             else {
                 println!("skip: {:?}", path);

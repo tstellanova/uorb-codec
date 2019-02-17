@@ -6,6 +6,9 @@ extern crate proc_macro2;
 use quote::{ ToTokens, TokenStreamExt};
 use proc_macro2::{Ident, Span, TokenStream};
 
+use crc16;
+use heck::{CamelCase};
+
 use std::default::Default;
 use std::io::{Read, Write, BufRead, BufReader};
 
@@ -310,6 +313,7 @@ impl ToTokens for UorbMsgConst {
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct UorbMsg {
     pub name: String,
+    pub raw_name: String,
     pub description: Option<String>,
     pub fields: Vec<UorbMsgField>,
     pub consts: Vec<UorbMsgConst>,
@@ -318,9 +322,10 @@ pub struct UorbMsg {
 
 
 impl UorbMsg {
-    pub fn from_lines<R: Read>(name: String, input: &mut R) -> UorbMsg  {
+    pub fn from_lines<R: Read>(raw_name: String, name: String, input: &mut R) -> UorbMsg  {
         let mut msg: UorbMsg = UorbMsg {
             name: name,
+            raw_name: raw_name,
             description: None,
             fields: vec![],
             consts: vec![],
@@ -462,6 +467,10 @@ impl ToTokens for UorbMsg {
         }
         let encoded_msg_len:TokenStream = format!("{:?}",encoded_msg_len).parse().unwrap();
 
+        let raw_name = self.raw_name.clone();
+        let hash_val = crc16::State::<crc16::X_25>::calculate(raw_name.as_bytes());
+        let hash_val: TokenStream = format!("{}",hash_val).parse().unwrap();
+
         let name:TokenStream = self.name.clone().parse().unwrap();
 
         let toks = quote!(
@@ -471,9 +480,14 @@ impl ToTokens for UorbMsg {
             #field_defs
         }
 
+        impl UorbMsgMeta for #name {
+            const ENCODED_LEN: usize = #encoded_msg_len;
+            const MSG_HASH_CODE: u16 = #hash_val;
+            const MSG_RAW_NAME: &'static str = #raw_name;
+        }
+
         impl #name {
-            pub const ENCODED_LEN: usize = #encoded_msg_len;
-            pub const MSG_HASH_CODE: u16 = 0; //TODO
+
             #const_defs
 
             pub fn deser(input: &[u8]) -> Option<Self> {
@@ -501,9 +515,12 @@ impl ToTokens for UorbMsg {
 
 
 /// Generate rust representation of uorb message, and corresponding conversion methods
-pub fn generate<R: Read, W: Write>(name: String, input: &mut R, output_rust: &mut W) {
+pub fn generate<R: Read, W: Write>(raw_name: String, input: &mut R, output_rust: &mut W) {
 
-    let msg:UorbMsg = UorbMsg::from_lines(name, input);
+    let name = raw_name.to_camel_case();
+    println!("msg name: {:?} converted: {:?}", raw_name, name);
+
+    let msg:UorbMsg = UorbMsg::from_lines(raw_name, name, input);
 //    println!("msg: {:?}", msg);
 
     let mut top_tokens = TokenStream::new();

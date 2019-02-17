@@ -12,6 +12,9 @@ lazy_static = "1.2.0"
 proc-macro2 = "0.4.27"
 rustfmt = "0.9"
 heck = "0.3.1"
+crc16 = "0.4.0"
+
+
 
 
 
