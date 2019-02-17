@@ -98,6 +98,37 @@ impl UorbFieldType {
     }
 
 
+    /// Emit writer of a given type
+    pub fn rust_writer(&self, name: String, buf_name: String) -> TokenStream {
+        use self::UorbFieldType::*;
+        let val:TokenStream = name.parse().unwrap();
+        let buf:TokenStream = buf_name.parse().unwrap();
+
+        match self.clone() {
+            Bool => quote!{#buf.put_u8(#val as u8);},
+            Char => quote!{#buf.put_u8(#val as u8);},
+            UInt8 => quote!{#buf.put_u8(#val);},
+            UInt16 => quote!{#buf.put_u16_le(#val);},
+            UInt32 => quote!{#buf.put_u32_le(#val);},
+            Int8 => quote!{#buf.put_i8(#val);},
+            Int16 => quote!{#buf.put_i16_le(#val);},
+            Int32 => quote!{#buf.put_i32_le(#val);},
+            Float32 => quote!{#buf.put_f32_le(#val);},
+            UInt64 => quote!{#buf.put_u64_le(#val);},
+            Int64 => quote!{#buf.put_i64_le(#val);},
+            Float64 => quote!{#buf.put_f64_le(#val);},
+            Array(t,_size) => {
+                let w = t.rust_writer("*val".to_string(), buf_name.clone());
+                quote!{
+                    #buf.put_u8(#val.len() as u8);
+                    for val in &#val {
+                        #w
+                    }
+                }
+            },
+        }
+    }
+
     /// Emit reader of a given type
     pub fn rust_reader(&self, name: String, buf_name: String) -> TokenStream {
         use self::UorbFieldType::*;
@@ -189,14 +220,16 @@ impl UorbMsgField {
     }
 
     /// Emit writer that will write this field to Vec<u8>
-//    fn rust_writer(&self) -> TokenStream {
-//        let wrong: TokenStream = TokenStream::new();
-//        wrong
-//    }
+    fn rust_writer(&self) -> TokenStream {
+        let name = "self.".to_string() + &self.name.clone();
+        let buf  = "buf".to_string();
+
+        self.uorbtype.rust_writer(name, buf)
+    }
 
     /// Emit reader that will read this field from a buffer
     fn rust_reader(&self) -> TokenStream {
-        let name =  "_struct.".to_string() + &self.name.clone();
+        let name =  "msg.".to_string() + &self.name.clone();
         let buf  = "buf".to_string();
 
         self.uorbtype.rust_reader(name, buf)
@@ -392,15 +425,23 @@ impl UorbMsg {
                 }
         } else {
             quote!{
-//                    let avail_len = input.len();
-//
-//                    //fast zero copy
-//                    let mut buf = Bytes::from(input).into_buf();
-                    let mut _struct = Self::default();
+                    let mut msg = Self::default();
                     #(#deser_fields)*
-                    Some(_struct)
+                    Some(msg)
                 }
         }
+    }
+
+    fn emit_serialize_fields(&self) -> TokenStream {
+        let ser_fields = self.fields.iter()
+            .map(|f| {
+                f.rust_writer()
+            }).collect::<Vec<TokenStream>>();
+        quote!{
+                let mut buf = Vec::new();
+                #(#ser_fields)*
+                buf
+            }
     }
 
 
@@ -412,7 +453,7 @@ impl ToTokens for UorbMsg {
         let field_defs = self.emit_field_defs();
 //        println!("field_defs: {:?}", field_defs);
         let deser_fields = self.emit_deserialize_fields();
-        //let ser_fields = self.emit_serialize_fields();
+        let ser_fields = self.emit_serialize_fields();
         //println!("deser_fields: {:?}",deser_fields);
 
         let mut encoded_msg_len = 0;
@@ -447,8 +488,7 @@ impl ToTokens for UorbMsg {
             }
 
             pub fn ser(&self) -> Vec<u8> {
-                vec![0]
-                //#ser_fields
+                #ser_fields
             }
         }
         );
