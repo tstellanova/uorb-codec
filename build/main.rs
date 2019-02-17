@@ -62,4 +62,6 @@ pub fn main() {
     //TODO verify this works if we add new files OR updated files
     println!("cargo:rerun-if-changed=msg/");
 
+//    panic!("fail intentionaly");
+
 }
