@@ -85,7 +85,61 @@ impl UorbFieldType {
         }
     }
 
+    /// Encoded size of a given type, in bytes
+    fn encoded_len(&self) -> usize {
+        use self::UorbFieldType::*;
+        match self.clone() {
+            UInt8 | Int8 | Char | Bool => 1,
+            UInt16 | Int16 => 2,
+            UInt32 | Int32 | Float32 => 4,
+            UInt64 | Int64 | Float64 => 8,
+            Array(t, size) => t.encoded_len() * size,
+        }
+    }
 
+
+    /// Emit reader of a given type
+    pub fn rust_reader(&self, name: String, buf_name: String) -> TokenStream {
+        use self::UorbFieldType::*;
+        let val:TokenStream = name.parse().unwrap();
+        let buf:TokenStream = buf_name.parse().unwrap();
+
+        match self.clone() {
+            Bool => quote!{#val = #buf.get_u8() != 0;},
+            Char => quote!{#val = #buf.get_u8() as char;},
+            UInt8 => quote!{#val = #buf.get_u8();},
+            UInt16 => quote!{#val = #buf.get_u16_le();},
+            UInt32 => quote!{#val = #buf.get_u32_le();},
+            UInt64 => quote!{#val = #buf.get_u64_le();},
+            Int8 => quote!{#val = #buf.get_i8();},
+            Int16 => quote!{#val = #buf.get_i16_le();},
+            Int32 => quote!{#val = #buf.get_i32_le();},
+            Int64 => quote!{#val = #buf.get_i64_le();},
+            Float32 => quote!{#val = #buf.get_f32_le();},
+            Float64 => quote!{#val = #buf.get_f64_le();},
+            Array(t, size) => {
+                if size > 32 {
+                    // it is a vector
+                    let r = t.rust_reader("let val".to_string(), buf_name.clone());
+                    quote!{
+                        for _ in 0..#size {
+                            #r
+                            #val.push(val);
+                        }
+                    }
+                } else {
+                    // handle as a slice
+                    let r = t.rust_reader("let val".to_string(), buf_name.clone());
+                    quote!{
+                        for idx in 0..#val.len() {
+                            #r
+                            #val[idx] = val;
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 impl Default for UorbFieldType {
@@ -134,15 +188,19 @@ impl UorbMsgField {
         }
     }
 
-//    /// Emit writer that will write this field to Vec<u8>
+    /// Emit writer that will write this field to Vec<u8>
 //    fn rust_writer(&self) -> TokenStream {
-//
+//        let wrong: TokenStream = TokenStream::new();
+//        wrong
 //    }
-//
-//    /// Emit reader that will read this field from a buffer
-//    fn rust_reader(&self) -> TokenStrean {
-//
-//    }
+
+    /// Emit reader that will read this field from a buffer
+    fn rust_reader(&self) -> TokenStream {
+        let name =  "_struct.".to_string() + &self.name.clone();
+        let buf  = "buf".to_string();
+
+        self.uorbtype.rust_reader(name, buf)
+    }
 }
 
 impl ToTokens for UorbMsgField {
@@ -304,88 +362,101 @@ impl UorbMsg {
 
     /// Emit rust consts
     fn emit_constants(&self) -> TokenStream {
-        let mut lil_stream: TokenStream = TokenStream::new();
+        let mut tok_stream: TokenStream = TokenStream::new();
         for item in self.consts.clone() {
-            item.to_tokens(&mut lil_stream);
+            item.to_tokens(&mut tok_stream);
         }
-        lil_stream
+        tok_stream
     }
 
     fn emit_field_defs(&self) -> TokenStream {
-        let mut lil_stream: TokenStream = TokenStream::new();
+        let mut tok_stream: TokenStream = TokenStream::new();
         for item in self.fields.clone() {
-            item.to_tokens(&mut lil_stream);
+            item.to_tokens(&mut tok_stream);
         }
-        lil_stream
+        tok_stream
     }
 
-    #[cfg(test)]
-    #[test]
-    pub fn test_process_field_desc_const() {
-        let line = "uint8 INDEX_AIRBRAKES = 6";
-        let mut msg = UorbMsg {
-            name: "Bogus".to_string(),
-            description: None,
-            fields: vec![],
-            consts: vec![],
-            topics: vec![]
-        };
+    fn emit_deserialize_fields(&self) -> TokenStream {
+        let deser_fields = self.fields.iter()
+            .map(|f| {
+                f.rust_reader()
+            }).collect::<Vec<TokenStream>>();
 
-        process_field_desc( line , None, &mut msg);
-        assert_eq!(msg.consts.len(), 1);
+        //println!("deser_fields  {:?}",deser_fields);
+
+        if deser_fields.is_empty() {
+            // struct has no fields
+            quote!{
+                    Some(Self::default())
+                }
+        } else {
+            quote!{
+//                    let avail_len = input.len();
+//
+//                    //fast zero copy
+//                    let mut buf = Bytes::from(input).into_buf();
+                    let mut _struct = Self::default();
+                    #(#deser_fields)*
+                    Some(_struct)
+                }
+        }
     }
 
-    #[cfg(test)]
-    #[test]
-    pub fn test_process_field_desc_field() {
-        let line = "uint64 timestamp_sample";
-        let mut msg = UorbMsg {
-            name: "Bogus".to_string(),
-            description: None,
-            fields: vec![],
-            consts: vec![],
-            topics: vec![]
-        };
-
-        process_field_desc( line , None, &mut msg);
-        assert_eq!(msg.fields.len(), 1);
-    }
 
 }
 
 impl ToTokens for UorbMsg {
-     fn to_tokens(&self, tokens: &mut TokenStream) {
+    fn to_tokens(&self, tokens: &mut TokenStream) {
         let const_defs = self.emit_constants();
         let field_defs = self.emit_field_defs();
+//        println!("field_defs: {:?}", field_defs);
+        let deser_fields = self.emit_deserialize_fields();
+        //let ser_fields = self.emit_serialize_fields();
+        //println!("deser_fields: {:?}",deser_fields);
 
-        let name =  self.name.clone();
-        let name:Ident = Ident::new(&name, Span::call_site());
+        let mut encoded_msg_len = 0;
+        for field in self.fields.clone() {
+            encoded_msg_len += field.uorbtype.encoded_len();
+        }
+        let encoded_msg_len:TokenStream = format!("{:?}",encoded_msg_len).parse().unwrap();
 
-         //TODO tally ENCODED_LEN
+        let name:TokenStream = self.name.clone().parse().unwrap();
+
         let toks = quote!(
+
         #[derive(Debug, Clone, PartialEq, Default)]
         pub struct #name {
             #field_defs
         }
 
         impl #name {
-            pub const ENCODED_LEN: usize = 0;
+            pub const ENCODED_LEN: usize = #encoded_msg_len;
+            pub const MSG_HASH_CODE: u16 = 0; //TODO
             #const_defs
 
-            pub fn deser(_input: &[u8]) -> Option<Self> {
-                None //#deser_vars
+            pub fn deser(input: &[u8]) -> Option<Self> {
+                if input.len() < Self::ENCODED_LEN {
+                    None
+                }
+                else {
+                    //fast zero copy
+                    let mut buf = Bytes::from(input).into_buf();
+                    #deser_fields
+                }
             }
 
             pub fn ser(&self) -> Vec<u8> {
-                vec![]
-                //#serialize_vars
+                vec![0]
+                //#ser_fields
             }
         }
-
         );
 
         tokens.append_all(toks);
     }
+
+
 }
 
 
@@ -396,12 +467,19 @@ pub fn generate<R: Read, W: Write>(name: String, input: &mut R, output_rust: &mu
 //    println!("msg: {:?}", msg);
 
     let mut top_tokens = TokenStream::new();
+
+    //TODO top_tokens.append_all(header);
     msg.to_tokens(&mut top_tokens);
     let rust_src = top_tokens.to_string();
     println!("rust_src: {:?}", rust_src);
+
     let mut cfg = rustfmt::config::Config::default();
     cfg.set().write_mode(rustfmt::config::WriteMode::Display);
-    rustfmt::format_input(rustfmt::Input::Text(rust_src), &cfg, Some(output_rust)).unwrap();
+    let res = rustfmt::format_input(rustfmt::Input::Text(rust_src), &cfg, Some(output_rust));
+    if res.is_err() {
+        println!("formatting failed");
+        panic!("foo");
+    }
     output_rust.flush().unwrap();
 
 }

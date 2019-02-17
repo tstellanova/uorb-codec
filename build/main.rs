@@ -43,6 +43,13 @@ fn process_msg_directory(msg_dir: &Path, fout: &mut File )  -> std::io::Result<(
             }
         }
     }
+    //    fn emit_mav_message(&self, enums: Vec<Tokens>, structs: Vec<Tokens>) -> Tokens {
+    //        quote!{
+    //                pub enum MavMessage {
+    //                    #(#enums(#structs)),*
+    //                }
+    //        }
+    //    }
 
     Ok(())
 }
