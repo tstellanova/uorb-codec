@@ -4,7 +4,7 @@ extern crate proc_macro2;
 
 
 use quote::{ ToTokens, TokenStreamExt};
-use proc_macro2::{Delimiter, Group, Ident, Literal, Span, TokenStream, TokenTree};
+use proc_macro2::{Ident, Span, TokenStream};
 
 use std::default::Default;
 use std::io::{Read, Write, BufRead, BufReader};
@@ -104,12 +104,12 @@ pub struct UorbMsgField {
 
 impl UorbMsgField {
     pub fn from_line(desc: &str, comment: Option<String>) -> Option<UorbMsgField> {
-        let field_desc = desc.trim().to_string() ;
+        let field_desc = desc.trim().to_string();
         if field_desc.len() < 2 {
             return None;
         }
 
-        let toks:Vec<&str> = field_desc.split_whitespace().collect();
+        let toks: Vec<&str> = field_desc.split_whitespace().collect();
         if toks.len() < 2 {
             //invalid field type description
             println!("invalid field_desc: {:?} ", field_desc);
@@ -128,12 +128,21 @@ impl UorbMsgField {
                 })
             },
             _ => {
-                println!("failed to parse: {:?}",toks[0]);
+                println!("failed to parse: {:?}", toks[0]);
                 return None
             }
         }
-
     }
+
+//    /// Emit writer that will write this field to Vec<u8>
+//    fn rust_writer(&self) -> TokenStream {
+//
+//    }
+//
+//    /// Emit reader that will read this field from a buffer
+//    fn rust_reader(&self) -> TokenStrean {
+//
+//    }
 }
 
 impl ToTokens for UorbMsgField {
@@ -346,29 +355,38 @@ impl UorbMsg {
 
 impl ToTokens for UorbMsg {
      fn to_tokens(&self, tokens: &mut TokenStream) {
-        let consts = self.emit_constants();
+        let const_defs = self.emit_constants();
         let field_defs = self.emit_field_defs();
 
         let name =  self.name.clone();
         let name:Ident = Ident::new(&name, Span::call_site());
 
-        //TODO implement eg Default
+         //TODO tally ENCODED_LEN
         let toks = quote!(
-        #[derive(Debug, Clone, PartialEq)]
+        #[derive(Debug, Clone, PartialEq, Default)]
         pub struct #name {
             #field_defs
         }
 
         impl #name {
-            #consts
+            pub const ENCODED_LEN: usize = 0;
+            #const_defs
+
+            pub fn deser(_input: &[u8]) -> Option<Self> {
+                None //#deser_vars
+            }
+
+            pub fn ser(&self) -> Vec<u8> {
+                vec![]
+                //#serialize_vars
+            }
         }
 
         );
+
         tokens.append_all(toks);
     }
 }
-
-
 
 
 /// Generate rust representation of uorb message, and corresponding conversion methods

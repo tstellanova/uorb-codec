@@ -5,6 +5,14 @@ pub mod common {
     include!(concat!(env!("OUT_DIR"), "/common.rs"));
 }
 
+/*
+HOWTO serialize uORB
+    _sendbuf[0] = (hash_val >> 8) & 0xFF;
+    _sendbuf[1] = hash_val & 0xFF;
+    _sendbuf[2] = instance_id; //the "instance" of the sensor /entity that sent this
+    _sendbuf[3] = (payload_len >> 8) & 0xFF;
+    _sendbuf[4] = payload_len & 0xFF;
+*/
 
 #[cfg(test)]
 mod tests {
