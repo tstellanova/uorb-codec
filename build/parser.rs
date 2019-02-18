@@ -1,7 +1,9 @@
 
 extern crate proc_macro2;
 
-
+use std::fs::{self, File};
+use std::path::{Path};
+use std::collections::HashMap;
 
 use quote::{ ToTokens, TokenStreamExt};
 use proc_macro2::{Ident, Span, TokenStream};
@@ -314,6 +316,7 @@ impl ToTokens for UorbMsgConst {
 pub struct UorbMsg {
     pub name: String,
     pub raw_name: String,
+    pub name_hash_val: u16,
     pub description: Option<String>,
     pub fields: Vec<UorbMsgField>,
     pub consts: Vec<UorbMsgConst>,
@@ -323,14 +326,19 @@ pub struct UorbMsg {
 
 impl UorbMsg {
     pub fn from_lines<R: Read>(raw_name: String, name: String, input: &mut R) -> UorbMsg  {
+        let hash_val = crc16::State::<crc16::X_25>::calculate(raw_name.as_bytes());
+
         let mut msg: UorbMsg = UorbMsg {
             name: name,
             raw_name: raw_name,
+            name_hash_val: hash_val,
             description: None,
             fields: vec![],
             consts: vec![],
             topics: vec![],
         };
+
+
 
         let buf_reader = BufReader::new(input);
         let mut all_topics: Vec<String> = vec![];
@@ -407,12 +415,17 @@ impl UorbMsg {
         tok_stream
     }
 
+    /// Emit msg field definitions
     fn emit_field_defs(&self) -> TokenStream {
         let mut tok_stream: TokenStream = TokenStream::new();
         for item in self.fields.clone() {
             item.to_tokens(&mut tok_stream);
         }
         tok_stream
+    }
+
+    fn emit_inner_struct_name(&self) -> TokenStream {
+        format!("{}Data",self.name).parse().unwrap()
     }
 
     fn emit_deserialize_fields(&self) -> TokenStream {
@@ -449,7 +462,6 @@ impl UorbMsg {
             }
     }
 
-
 }
 
 impl ToTokens for UorbMsg {
@@ -471,22 +483,23 @@ impl ToTokens for UorbMsg {
         let hash_val = crc16::State::<crc16::X_25>::calculate(raw_name.as_bytes());
         let hash_val: TokenStream = format!("{}",hash_val).parse().unwrap();
 
-        let name:TokenStream = self.name.clone().parse().unwrap();
+        let inner_struct_name = self.emit_inner_struct_name();
+        //let name:TokenStream = self.name.clone().parse().unwrap();
 
         let toks = quote!(
 
         #[derive(Debug, Clone, PartialEq, Default)]
-        pub struct #name {
+        pub struct #inner_struct_name {
             #field_defs
         }
 
-        impl UorbMsgMeta for #name {
+        impl UorbMsgMeta for #inner_struct_name {
             const ENCODED_LEN: usize = #encoded_msg_len;
             const MSG_HASH_CODE: u16 = #hash_val;
             const MSG_RAW_NAME: &'static str = #raw_name;
         }
 
-        impl #name {
+        impl #inner_struct_name {
 
             #const_defs
 
@@ -514,30 +527,121 @@ impl ToTokens for UorbMsg {
 }
 
 
-/// Generate rust representation of uorb message, and corresponding conversion methods
-pub fn generate<R: Read, W: Write>(raw_name: String, input: &mut R, output_rust: &mut W) {
+pub struct Parser {
+    msg_list: Vec<String>,
+    msg_map: HashMap<u16, String>,
+}
 
-    let name = raw_name.to_camel_case();
-    println!("msg name: {:?} converted: {:?}", raw_name, name);
-
-    let msg:UorbMsg = UorbMsg::from_lines(raw_name, name, input);
-//    println!("msg: {:?}", msg);
-
-    let mut top_tokens = TokenStream::new();
-
-    //TODO top_tokens.append_all(header);
-    msg.to_tokens(&mut top_tokens);
-    let rust_src = top_tokens.to_string();
-    println!("rust_src: {:?}", rust_src);
-
-    let mut cfg = rustfmt::config::Config::default();
-    cfg.set().write_mode(rustfmt::config::WriteMode::Display);
-    let res = rustfmt::format_input(rustfmt::Input::Text(rust_src), &cfg, Some(output_rust));
-    if res.is_err() {
-        println!("formatting failed");
-        panic!("foo");
+impl Parser {
+    pub fn new() -> Parser {
+        Parser {
+            msg_list: vec![],
+            msg_map: HashMap::with_capacity(255),
+        }
     }
-    output_rust.flush().unwrap();
 
+    fn write_rust_to_output<W: Write>(&self, tokens: &TokenStream, output_rust: &mut W) {
+        let rust_src = tokens.to_string();
+        //println!("rust_src: {:?}", rust_src);
+
+        let mut cfg = rustfmt::config::Config::default();
+        cfg.set().write_mode(rustfmt::config::WriteMode::Display);
+        let res = rustfmt::format_input(rustfmt::Input::Text(rust_src), &cfg, Some(output_rust));
+        if res.is_err() {
+            println!("formatting failed");
+            panic!("foo");
+        }
+        output_rust.flush().unwrap();
+    }
+
+    /// Generate rust representation of uorb message, and corresponding conversion methods
+    pub fn generate<R: Read, W: Write>(&mut self, raw_name: String, input: &mut R, output_rust: &mut W) {
+        let name = raw_name.to_camel_case();
+        println!("msg name: {:?} converted: {:?}", raw_name, name);
+        self.msg_list.push(name.clone());
+
+        let msg: UorbMsg = UorbMsg::from_lines(raw_name, name.clone(), input);
+        self.msg_map.insert(msg.name_hash_val, name.clone());
+
+        let mut top_tokens = TokenStream::new();
+        msg.to_tokens(&mut top_tokens);
+
+        self.write_rust_to_output(&top_tokens, output_rust);
+    }
+
+    /// iterate over all the .msg files in the msg directory
+    pub fn process_msg_directory(&mut self, msg_dir: &Path, fout: &mut File) -> std::io::Result<()> {
+
+        let msg_file_extension = ".msg";
+
+        for entry in fs::read_dir(msg_dir)? {
+            let entry = entry?;
+            println!("processing: {:?}", entry);
+            let path = entry.path();
+
+            if !path.is_dir() {
+                let fname = path.file_name().unwrap().to_str().unwrap();
+                if fname.ends_with(msg_file_extension) {
+                    //println!("hit: {:?}", path);
+                    let range: usize = fname.len() - msg_file_extension.len();
+                    let name = fname[..range].to_string();
+
+                    let mut fin: File = File::open(path).unwrap();
+                    self.generate(name, &mut fin, fout);
+                } else {
+                    println!("skip: {:?}", path);
+                }
+            }
+        }
+
+
+        //we now have msg_list with a list of all uORB messages
+        let msg_enum_names = self.msg_list.iter()
+            .map(|msg_name| {
+                let line = format!("{}({}Data),",msg_name,msg_name);
+                line.parse().unwrap()
+            })
+            .collect::<Vec<TokenStream>>();
+
+
+        let msg_deser_toks: Vec<TokenStream> = self.msg_map.iter()
+            .map(|(hash_val, msg_name)| {
+                let name_ident:TokenStream = msg_name.parse().unwrap();
+                let data_ident:TokenStream = format!("{}Data",msg_name).parse().unwrap();
+
+                quote!(
+                #hash_val => Some(UorbMessage::#name_ident (
+                    #data_ident ::deser(payload).unwrap()
+                )),
+                )
+            })
+            .collect::<Vec<TokenStream>>();
+
+//
+//        0 => Some(MavMessage::HEARTBEAT(
+//            HEARTBEAT_DATA::deser(payload).unwrap(),
+//        )),
+
+        let enum_toks = quote!(
+        #[derive(Clone, PartialEq, Debug)]
+        pub enum UorbMessage {
+            #(#msg_enum_names)*
+        }
+
+        impl UorbMessage {
+            pub fn parse(hash_val: u16, payload: &[u8]) -> Option<UorbMessage> {
+                match hash_val {
+                #(#msg_deser_toks)*
+                _ => None
+                }
+            }
+        }
+        );
+
+        self.write_rust_to_output(&enum_toks, fout);
+
+
+        Ok(())
+    }
 }
 

@@ -2,8 +2,8 @@
 extern crate uorb_codec;
 
 
-pub fn get_vehicle_status() -> uorb_codec::common::VehicleStatus {
-    uorb_codec::common::VehicleStatus {
+pub fn get_vehicle_status() -> uorb_codec::common::VehicleStatusData {
+    uorb_codec::common::VehicleStatusData {
         timestamp: 83838333,
         nav_state: 14,
         arming_state: 15,
@@ -31,8 +31,8 @@ pub fn get_vehicle_status() -> uorb_codec::common::VehicleStatus {
     }
 }
 
-pub fn get_actuator_controls() -> uorb_codec::common::ActuatorControls {
-    uorb_codec::common::ActuatorControls {
+pub fn get_actuator_controls() -> uorb_codec::common::ActuatorControlsData {
+    uorb_codec::common::ActuatorControlsData {
         timestamp: 19,
         timestamp_sample: 21,
         control: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],
