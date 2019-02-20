@@ -327,6 +327,7 @@ pub struct UorbMsg {
 impl UorbMsg {
     pub fn from_lines<R: Read>(raw_name: String, name: String, input: &mut R) -> UorbMsg  {
         let hash_val = crc16::State::<crc16::X_25>::calculate(raw_name.as_bytes());
+        println!("msg raw_name {:?} hash_val: {}", raw_name, hash_val);
 
         let mut msg: UorbMsg = UorbMsg {
             name: name,
@@ -488,7 +489,7 @@ impl ToTokens for UorbMsg {
 
         let toks = quote!(
 
-        #[derive(Debug, Clone, PartialEq, Default)]
+        #[derive(Debug, Clone, Copy, PartialEq, Default)]
         pub struct #inner_struct_name {
             #field_defs
         }

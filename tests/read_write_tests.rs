@@ -29,7 +29,7 @@ pub fn test_write_read_vehicle_status() {
 
     if let uorb_codec::common::UorbMessage::VehicleStatus(decoded_msg) = decoded_msg {
         assert_eq!(decoded_header.hash, header.hash);
-        //TODO assert_eq!(decoded_msg.timestamp, msg.timestamp);
+        assert_eq!(decoded_msg.timestamp, msg_data.clone().timestamp);
     } else {
         panic!("Read wrong message type");
     }

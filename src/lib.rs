@@ -43,7 +43,6 @@ pub const UORB_MAGIC_V1: u8 = 0xAA;
 
 pub fn write_msg<W: Write>(w: &mut W, header: &UorbHeader, data: &UorbMessage) -> Result<()> {
     let payload = data.ser();
-//    println!("write payload_len : {}", payload.len());
 
     let header = &[
         UORB_MAGIC_V1,
@@ -57,24 +56,9 @@ pub fn write_msg<W: Write>(w: &mut W, header: &UorbHeader, data: &UorbMessage) -
     w.write_all(header)?;
     w.write_all(&payload[..])?;
 
-//        Err( Error::new(ErrorKind::Other, " unimplemented"))
     Ok(())
 }
 
-/*
-// microRTPS uses:
-// * [>,>,>,topic_ID,seq,payload_length_H,payload_length_L,CRCHigh,CRCLow,payloadStart, ... ,payloadEnd]
-
-HOWTO transmit/receive uORB
-hash the uorb message name to get the hash_val
-    magic
-    _sendbuf[0] = (hash_val >> 8) & 0xFF;
-    _sendbuf[1] = hash_val & 0xFF;
-    _sendbuf[2] = instance_id; //the "instance" of the sensor /entity that sent this
-    _sendbuf[3] = (payload_len >> 8) & 0xFF;
-    _sendbuf[4] = payload_len & 0xFF;
-    followed by payload data...
-*/
 
 pub fn read_msg<R: Read>(r: &mut R) -> Result<(UorbHeader, UorbMessage)> {
 
@@ -101,9 +85,11 @@ pub fn read_msg<R: Read>(r: &mut R) -> Result<(UorbHeader, UorbMessage)> {
 
         //TODO verify that payload size will never exceed this
         let mut payload_buf = [0; 255];
+        println!("payload_len: {}", payload_len);
         let payload = &mut payload_buf[..payload_len.into()];
         r.read_exact(payload)?;
 
+        println!("parse {} len {}", header.hash, payload_len);
         let msg = UorbMessage::parse(header.hash, payload).unwrap();
         return Ok((header, msg));
     }
