@@ -2,7 +2,7 @@
 extern crate bytes;
 extern crate byteorder;
 
-use std::io::{Error, ErrorKind, Read, Result, Write};
+use std::io::{ Read, Result, Write};
 use byteorder::{ReadBytesExt};
 
 
@@ -42,10 +42,23 @@ pub struct UorbHeader {
 pub const UORB_MAGIC_V1: u8 = 0xAA;
 
 pub fn write_msg<W: Write>(w: &mut W, header: &UorbHeader, data: &UorbMessage) -> Result<()> {
-    //TODO implement write_msg
-    Err( Error::new(ErrorKind::Other, " unimplemented"))
+    let payload = data.ser();
+//    println!("write payload_len : {}", payload.len());
 
-//    Ok(())
+    let header = &[
+        UORB_MAGIC_V1,
+        ((header.hash >> 8) & 0xFF) as u8,
+        (header.hash & 0xFF) as u8,
+        header.instance_id,
+        ((payload.len() >> 8) & 0xFF) as u8,
+        (payload.len() & 0xFF) as u8,
+        ];
+
+    w.write_all(header)?;
+    w.write_all(&payload[..])?;
+
+//        Err( Error::new(ErrorKind::Other, " unimplemented"))
+    Ok(())
 }
 
 /*

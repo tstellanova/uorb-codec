@@ -604,7 +604,7 @@ impl Parser {
             .collect::<Vec<TokenStream>>();
 
 
-        let msg_deser_toks: Vec<TokenStream> = self.msg_map.iter()
+        let msg_data_deser_toks: Vec<TokenStream> = self.msg_map.iter()
             .map(|(hash_val, msg_name)| {
                 let name_ident:TokenStream = msg_name.parse().unwrap();
                 let data_ident:TokenStream = format!("{}Data",msg_name).parse().unwrap();
@@ -617,10 +617,13 @@ impl Parser {
             })
             .collect::<Vec<TokenStream>>();
 
-//
-//        0 => Some(MavMessage::HEARTBEAT(
-//            HEARTBEAT_DATA::deser(payload).unwrap(),
-//        )),
+
+        let msg_map_deser_names = self.msg_list.iter()
+            .map(|msg_name| {
+                msg_name.parse().unwrap()
+            })
+            .collect::<Vec<TokenStream>>();
+
 
         let enum_toks = quote!(
         #[derive(Clone, PartialEq, Debug)]
@@ -631,8 +634,14 @@ impl Parser {
         impl UorbMessage {
             pub fn parse(hash_val: u16, payload: &[u8]) -> Option<UorbMessage> {
                 match hash_val {
-                #(#msg_deser_toks)*
+                #(#msg_data_deser_toks)*
                 _ => None
+                }
+            }
+
+            pub fn ser(&self) -> Vec<u8> {
+                match self {
+                 #(&UorbMessage::#msg_map_deser_names(ref body) => body.ser(),)*
                 }
             }
         }
