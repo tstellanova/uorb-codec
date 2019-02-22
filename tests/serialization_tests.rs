@@ -8,8 +8,6 @@ mod test_shared;
 mod test_serialization {
     use crate::test_shared;
     use uorb_codec::common::*;
-    use uorb_codec::UorbMsgMeta;
-
 
     #[test]
     pub fn test_deserialize_actuator_controls() {

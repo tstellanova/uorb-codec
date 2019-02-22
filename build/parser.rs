@@ -326,7 +326,7 @@ pub struct UorbMsg {
 
 impl UorbMsg {
     pub fn from_lines<R: Read>(raw_name: String, name: String, input: &mut R) -> UorbMsg  {
-        let hash_val = crc16::State::<crc16::X_25>::calculate(raw_name.as_bytes());
+        let hash_val = crc16::State::<crc16::MCRF4XX>::calculate(raw_name.as_bytes());
         println!("msg raw_name {:?} hash_val: {}", raw_name, hash_val);
 
         let mut msg: UorbMsg = UorbMsg {
@@ -354,7 +354,7 @@ impl UorbMsg {
                     let comment_split: Vec<&str> = trimline.split("#").collect();
                     match comment_split.len() {
                         1 => { //all comment, as in a TOPICS line
-                            println!("all comment: {:?}", comment_split);
+                            println!("All comment: {:?}", comment_split);
                             let topics_exist: Vec<&str> = comment_split[0].split("TOPICS").collect();
                             if topics_exist.len() > 0 {
                                 let topics: Vec<&str> = topics_exist[0].split_whitespace().collect();
@@ -366,7 +366,7 @@ impl UorbMsg {
                             }
                         },
                         2 => { // half field, half comment]
-                            println!("halfsies: {:?}", comment_split);
+                            //println!("halfsies: {:?}", comment_split);
                             let field_desc = comment_split[0];
                             let comment = comment_split[1].to_string();
 
@@ -481,7 +481,9 @@ impl ToTokens for UorbMsg {
         let encoded_msg_len:TokenStream = format!("{:?}",encoded_msg_len).parse().unwrap();
 
         let raw_name = self.raw_name.clone();
-        let hash_val = crc16::State::<crc16::X_25>::calculate(raw_name.as_bytes());
+        let hash_val = crc16::State::<crc16::MCRF4XX>::calculate(raw_name.as_bytes());
+        println!("raw_name: {} hash_val: 0x{:x}", raw_name, hash_val);
+
         let hash_val: TokenStream = format!("{}",hash_val).parse().unwrap();
 
         let inner_struct_name = self.emit_inner_struct_name();

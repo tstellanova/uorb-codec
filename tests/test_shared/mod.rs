@@ -1,9 +1,39 @@
 
 extern crate uorb_codec;
+use uorb_codec::common::*;
 
+pub fn get_vehicle_gps_position() -> VehicleGpsPositionData {
+    VehicleGpsPositionData {
+        timestamp: 83838333,
+        lat: 1005,
+        lon: 3355,
+        alt: 500,
+        alt_ellipsoid: 500,
+        s_variance_m_s: 1.1,
+        c_variance_rad: 0.5,
+        fix_type: 3,
+        eph: 1.0,
+        epv: 1.0,
+        hdop: 2.0,
+        vdop: 3.0,
+        noise_per_ms: 5,
+        jamming_indicator: 0,
+        vel_m_s: 0.001,
+        vel_n_m_s: 0.001,
+        vel_e_m_s: 0.001,
+        vel_d_m_s: 0.001,
+        cog_rad: 0.01,
+        vel_ned_valid: true,
+        timestamp_time_relative: 55,
+        time_utc_usec: 83838333,
+        satellites_used: 11,
+        heading: 0.01,
+        heading_offset: 0.0,
+    }
+}
 
-pub fn get_vehicle_status() -> uorb_codec::common::VehicleStatusData {
-    uorb_codec::common::VehicleStatusData {
+pub fn get_vehicle_status() -> VehicleStatusData {
+    VehicleStatusData {
         timestamp: 83838333,
         nav_state: 14,
         arming_state: 15,
@@ -31,8 +61,8 @@ pub fn get_vehicle_status() -> uorb_codec::common::VehicleStatusData {
     }
 }
 
-pub fn get_actuator_controls() -> uorb_codec::common::ActuatorControlsData {
-    uorb_codec::common::ActuatorControlsData {
+pub fn get_actuator_controls() -> ActuatorControlsData {
+    ActuatorControlsData {
         timestamp: 19,
         timestamp_sample: 21,
         control: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],

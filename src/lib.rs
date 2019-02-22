@@ -2,7 +2,7 @@
 extern crate bytes;
 extern crate byteorder;
 
-use std::io::{ Read, Result, Write};
+use std::io::{ Error, ErrorKind, Read, Result, Write};
 use byteorder::{ReadBytesExt};
 
 
@@ -90,8 +90,14 @@ pub fn read_msg<R: Read>(r: &mut R) -> Result<(UorbHeader, UorbMessage)> {
         r.read_exact(payload)?;
 
         println!("parse {} len {}", header.hash, payload_len);
-        let msg = UorbMessage::parse(header.hash, payload).unwrap();
-        return Ok((header, msg));
+        if let Some(msg) = UorbMessage::parse(header.hash, payload) {
+            return Ok((header, msg));
+        }
+        else {
+            let err = Error::new(ErrorKind::InvalidInput,
+                                     format!("msg hash: {}",  header.hash));
+            return Err(err);
+        }
     }
 
 }
