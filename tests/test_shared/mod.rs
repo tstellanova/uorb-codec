@@ -69,4 +69,30 @@ pub fn get_actuator_controls() -> ActuatorControlsData {
     }
 }
 
+const GYRO_REBASE_FACTOR:f32 =  1E3;
+
+pub fn get_sensor_gyro() -> SensorGyroData {
+    let xgyro = 1111.0;
+    let ygyro = 2222.0;
+    let zgyro = 3333.0;
+
+    SensorGyroData {
+        device_id: 6887,
+        timestamp: 0x1ed59200230008, //0x1ed592,
+        error_count: 0,
+        x: xgyro,
+        y: ygyro,
+        z: zgyro,
+        integral_dt: 5 * 1000000,
+        x_integral: 1.0,
+        y_integral: 1.0,
+        z_integral: 1.0,
+        temperature: 25.0,
+        scaling: 0.0,
+        x_raw: (xgyro * GYRO_REBASE_FACTOR) as i16,
+        y_raw: (ygyro * GYRO_REBASE_FACTOR) as i16,
+        z_raw: (zgyro * GYRO_REBASE_FACTOR) as i16,
+    }
+}
+
 

@@ -11,18 +11,26 @@ mod test_serialization {
 
     #[test]
     pub fn test_deserialize_actuator_controls() {
-        let msg = test_shared::get_actuator_controls();
-        let encoded:Vec<u8> = msg.ser();
+        let msg_data = test_shared::get_actuator_controls();
+        let encoded:Vec<u8> = msg_data.ser();
         let decoded = ActuatorControlsData::deser(encoded.as_slice()).unwrap();
-        assert_eq!(msg.timestamp, decoded.timestamp);
+        assert_eq!(msg_data.timestamp, decoded.timestamp);
     }
 
     #[test]
     pub fn test_deserialize_vehicle_status() {
-        let msg = test_shared::get_vehicle_status();
-        let encoded:Vec<u8> = msg.ser();
+        let msg_data = test_shared::get_vehicle_status();
+        let encoded:Vec<u8> = msg_data.ser();
         let decoded = VehicleStatusData::deser(encoded.as_slice()).unwrap();
-        assert_eq!(msg.onboard_control_sensors_health, decoded.onboard_control_sensors_health);
+        assert_eq!(msg_data.onboard_control_sensors_health, decoded.onboard_control_sensors_health);
+    }
+
+    #[test]
+    pub fn test_deserialize_sensor_gyro() {
+        let msg_data = test_shared::get_sensor_gyro();
+        let encoded:Vec<u8> = msg_data.ser();
+        let decoded = SensorGyroData::deser(encoded.as_slice()).unwrap();
+        assert_eq!(msg_data.timestamp, decoded.timestamp);
     }
 
 

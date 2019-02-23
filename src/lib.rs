@@ -26,6 +26,7 @@ pub use self::common::UorbMessage as UorbMessage;
 
 #[derive(Debug, Clone)]
 pub struct UorbHeader {
+    /// indicates which version of the header we are sending
     pub version: u8,
     /// unique hash of the msg name
     pub hash: u16,
@@ -45,7 +46,7 @@ pub fn write_msg<W: Write>(w: &mut W, header: &UorbHeader, data: &UorbMessage) -
     let payload = data.ser();
 
     let header = &[
-        UORB_MAGIC_V1,
+        header.version,
         ((header.hash >> 8) & 0xFF) as u8,
         (header.hash & 0xFF) as u8,
         header.instance_id,
@@ -85,11 +86,11 @@ pub fn read_msg<R: Read>(r: &mut R) -> Result<(UorbHeader, UorbMessage)> {
 
         //TODO verify that payload size will never exceed this
         let mut payload_buf = [0; 255];
-        println!("payload_len: {}", payload_len);
+        //println!("payload_len: {}", payload_len);
         let payload = &mut payload_buf[..payload_len.into()];
         r.read_exact(payload)?;
 
-        println!("parse {} len {}", header.hash, payload_len);
+        //println!("parse {} len {}", header.hash, payload_len);
         if let Some(msg) = UorbMessage::parse(header.hash, payload) {
             return Ok((header, msg));
         }
