@@ -91,7 +91,7 @@ impl UorbFieldType {
     }
 
     /// Encoded size of a given type, in bytes
-    fn encoded_len(&self) -> usize {
+    pub fn encoded_len(&self) -> usize {
         use self::UorbFieldType::*;
         match self.clone() {
             UInt8 | Int8 | Char | Bool => 1,
@@ -102,6 +102,26 @@ impl UorbFieldType {
         }
     }
 
+    /// Is this field an array type?
+    pub fn is_array(&self) -> bool {
+        use self::UorbFieldType::*;
+        match self.clone() {
+            Array(t, size) => true,
+            _ => false
+        }
+    }
+
+    /// Variation of encoding len used for field sorting rule
+    pub fn field_sorting_len(&self) -> usize {
+        use self::UorbFieldType::*;
+        match self.clone() {
+            UInt8 | Int8 | Char | Bool => 1,
+            UInt16 | Int16 => 2,
+            UInt32 | Int32 | Float32 => 4,
+            UInt64 | Int64 | Float64 => 8,
+            Array(t, _size) => t.encoded_len(),
+        }
+    }
 
     /// Emit writer of a given type
     pub fn rust_writer(&self, name: String, buf_name: String) -> TokenStream {
@@ -185,7 +205,7 @@ impl Default for UorbFieldType {
 }
 
 
-#[derive(Debug, PartialEq, Clone, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct UorbMsgField {
     pub uorbtype: UorbFieldType,
     pub name: String,
@@ -312,7 +332,7 @@ impl ToTokens for UorbMsgConst {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct UorbMsg {
     pub name: String,
     pub raw_name: String,
@@ -347,7 +367,6 @@ impl UorbMsg {
         for line in buf_reader.lines() {
             let line = line.unwrap().clone();
             let trimline = line.trim().to_string();
-
 
             match trimline.find('#') {
                 Some(_hash_pos) => {
@@ -386,6 +405,7 @@ impl UorbMsg {
         }
 
         msg.topics = all_topics;
+        msg.sort_fields_by_desc_encoded_len();
 
         msg
     }
@@ -416,9 +436,21 @@ impl UorbMsg {
         tok_stream
     }
 
+    /// Sort fields,  by encoded size, using stable sort
+    /// Arrays are treated as being the size of their members
+    pub fn sort_fields_by_desc_encoded_len(&mut self) {
+        //array types are sorted by the type of the array items
+        self.fields.sort_by(|a, b| {
+            b.uorbtype.field_sorting_len().cmp(&a.uorbtype.field_sorting_len())
+        })
+
+
+    }
+
     /// Emit msg field definitions
     fn emit_field_defs(&self) -> TokenStream {
         let mut tok_stream: TokenStream = TokenStream::new();
+
         for item in self.fields.clone() {
             item.to_tokens(&mut tok_stream);
         }
