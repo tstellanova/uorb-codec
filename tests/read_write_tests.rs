@@ -19,6 +19,13 @@ mod test_read_write {
     }
 
     #[test]
+    pub fn test_wrapping_msg_data() {
+        let msg_data = test_shared::get_vehicle_gps_position();
+        let (hdr, msg) = msg_data.gen_ready_pair(55);
+        assert_eq!(hdr.instance_id,55);
+    }
+
+    #[test]
     pub fn test_write_read_vehicle_status() {
         let mut v = vec![];
         let msg_data = test_shared::get_vehicle_status();
