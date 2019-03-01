@@ -102,14 +102,6 @@ impl UorbFieldType {
         }
     }
 
-    /// Is this field an array type?
-    pub fn is_array(&self) -> bool {
-        use self::UorbFieldType::*;
-        match self.clone() {
-            Array(t, size) => true,
-            _ => false
-        }
-    }
 
     /// Variation of encoding len used for field sorting rule
     pub fn field_sorting_len(&self) -> usize {
@@ -519,8 +511,7 @@ impl ToTokens for UorbMsg {
         let hash_val: TokenStream = format!("{}",hash_val).parse().unwrap();
 
         let inner_struct_name = self.emit_inner_struct_name();
-        //let name:TokenStream = self.name.clone().parse().unwrap();
-
+        let enum_cast_name:TokenStream = self.name.clone().parse().unwrap();
         let toks = quote!(
 
         #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -532,12 +523,18 @@ impl ToTokens for UorbMsg {
             const ENCODED_LEN: usize = #encoded_msg_len;
             const MSG_HASH_CODE: u16 = #hash_val;
             const MSG_RAW_NAME: &'static str = #raw_name;
+
+            fn ser(&self) -> Vec<u8> {
+                #ser_fields
+            }
+
+            fn wrap(&self) -> UorbMessage {
+                UorbMessage::#enum_cast_name(*self)
+            }
         }
 
         impl #inner_struct_name {
-
             #const_defs
-
             pub fn deser(input: &[u8]) -> Option<Self> {
                 if input.len() < Self::ENCODED_LEN {
                     None
@@ -549,9 +546,6 @@ impl ToTokens for UorbMsg {
                 }
             }
 
-            pub fn ser(&self) -> Vec<u8> {
-                #ser_fields
-            }
         }
         );
 
@@ -661,6 +655,8 @@ impl Parser {
 
 
         let enum_toks = quote!(
+
+
         #[derive(Clone, PartialEq, Debug)]
         pub enum UorbMessage {
             #(#msg_enum_names)*
@@ -679,6 +675,8 @@ impl Parser {
                  #(&UorbMessage::#msg_map_deser_names(ref body) => body.ser(),)*
                 }
             }
+
+
         }
         );
 
