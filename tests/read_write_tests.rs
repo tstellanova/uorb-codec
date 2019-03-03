@@ -21,7 +21,7 @@ mod test_read_write {
     #[test]
     pub fn test_wrapping_msg_data() {
         let msg_data = test_shared::get_vehicle_gps_position();
-        let (hdr, msg) = msg_data.gen_ready_pair(55);
+        let (hdr, msg) = msg_data.gen_ready_pair(55, 666);
         assert_eq!(hdr.instance_id,55);
     }
 
@@ -32,6 +32,7 @@ mod test_read_write {
         let header = uorb_codec::UorbHeader {
             version: uorb_codec::UORB_MAGIC_V1,
             hash: VehicleStatusData::MSG_HASH_CODE,
+            timestamp: 666,
             instance_id: 0,
             payload_len: VehicleStatusData::ENCODED_LEN,
         };

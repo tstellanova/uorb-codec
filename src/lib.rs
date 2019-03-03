@@ -17,18 +17,19 @@ pub trait UorbMsgMeta {
     fn get_hash_code(&self) ->u16 { Self::MSG_HASH_CODE}
 
     /// Create a UorbHeader for this data with the given uORB instance ID
-    fn header_for_instance(&self, instance_id: u8) -> UorbHeader {
+    fn header_for_instance(&self, instance_id: u8, timestamp: u64) -> UorbHeader {
         UorbHeader {
             version: UORB_MAGIC_V1,
             hash: self.get_hash_code(),
-            instance_id: instance_id,
+            timestamp,
+            instance_id,
             payload_len: Self::ENCODED_LEN
         }
     }
 
     /// Generate a uORB header and message pair for this inner data
-    fn gen_ready_pair(&self, instance_id: u8) -> (UorbHeader, UorbMessage) {
-        let hdr = self.header_for_instance(instance_id);
+    fn gen_ready_pair(&self, instance_id: u8, timestamp: u64) -> (UorbHeader, UorbMessage) {
+        let hdr = self.header_for_instance(instance_id, timestamp);
         let msg = self.wrap();
         (hdr, msg)
     }
@@ -63,6 +64,8 @@ pub struct UorbHeader {
     pub version: u8,
     /// unique hash of the msg name
     pub hash: u16,
+    /// time at which this message was generated
+    pub timestamp: u64,
     /// the "instance" of the sensor/entity that sent this
     pub instance_id: u8,
     /// length of the payload in bytes
@@ -79,6 +82,7 @@ pub fn write_msg<W: Write>(w: &mut W, header: &UorbHeader, data: &UorbMessage) -
 
     w.write_u8(header.version)?;
     w.write_u16::<BigEndian>(header.hash)?;
+    w.write_u64::<BigEndian>(header.timestamp)?;
     w.write_u8(header.instance_id)?;
     w.write_u16::<BigEndian>(payload.len() as u16)?;
 
@@ -95,20 +99,24 @@ pub fn read_msg<R: Read>(r: &mut R) -> Result<(UorbHeader, UorbMessage)> {
         if r.read_u8()? != UORB_MAGIC_V1 {
             continue;
         }
-        let hash_val:u16 = r.read_u16::<BigEndian>()?;
-        let instanced_id = r.read_u8()?;
+        let hash:u16 = r.read_u16::<BigEndian>()?;
+        let timestamp:u64 = r.read_u64::<BigEndian>()?;
+        let instance_id = r.read_u8()?;
         let payload_len:usize =  r.read_u16::<BigEndian>()? as usize;
 
         let header = UorbHeader {
             version: UORB_MAGIC_V1,
-            hash: hash_val,
-            instance_id: instanced_id,
-            payload_len: payload_len,
+            hash,
+            timestamp,
+            instance_id,
+            payload_len,
         };
 
-        //TODO verify that payload size will never exceed this
         let mut payload_buf = [0; 255];
-        //println!("payload_len: {}", payload_len);
+        if payload_len > 255 {
+            //println!("payload_len excessive: {}", payload_len);
+            continue;
+        }
         let payload = &mut payload_buf[..payload_len.into()];
         r.read_exact(payload)?;
 
