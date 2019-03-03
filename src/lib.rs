@@ -3,7 +3,7 @@ extern crate bytes;
 extern crate byteorder;
 
 use std::io::{ Error, ErrorKind, Read, Result, Write};
-use byteorder::{ReadBytesExt};
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 
 /// Compatible protocol version number, used for framing messages on the wire
 pub const UORB_MAGIC_V1: u8 = 0xAA;
@@ -77,16 +77,11 @@ pub struct UorbHeader {
 pub fn write_msg<W: Write>(w: &mut W, header: &UorbHeader, data: &UorbMessage) -> Result<()> {
     let payload = data.ser();
 
-    let header = &[
-        header.version,
-        ((header.hash >> 8) & 0xFF) as u8,
-        (header.hash & 0xFF) as u8,
-        header.instance_id,
-        ((payload.len() >> 8) & 0xFF) as u8,
-        (payload.len() & 0xFF) as u8,
-        ];
+    w.write_u8(header.version)?;
+    w.write_u16::<BigEndian>(header.hash)?;
+    w.write_u8(header.instance_id)?;
+    w.write_u16::<BigEndian>(payload.len() as u16)?;
 
-    w.write_all(header)?;
     w.write_all(&payload[..])?;
 
     Ok(())
@@ -100,14 +95,9 @@ pub fn read_msg<R: Read>(r: &mut R) -> Result<(UorbHeader, UorbMessage)> {
         if r.read_u8()? != UORB_MAGIC_V1 {
             continue;
         }
-
-        let hash_h = r.read_u8()?;
-        let hash_l = r.read_u8()?;
-        let hash_val:u16 = ((hash_h as u16) << 8) + hash_l as u16;
+        let hash_val:u16 = r.read_u16::<BigEndian>()?;
         let instanced_id = r.read_u8()?;
-        let payload_len_h = r.read_u8()?;
-        let payload_len_l = r.read_u8()?;
-        let payload_len:usize = (((payload_len_h as u16) << 8) + payload_len_l  as u16) as usize;
+        let payload_len:usize =  r.read_u16::<BigEndian>()? as usize;
 
         let header = UorbHeader {
             version: UORB_MAGIC_V1,
