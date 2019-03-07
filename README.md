@@ -1,5 +1,6 @@
 # uorb-codec
 
+[![Build Status](https://badge.buildkite.com/2fb7b3d2f3ae1695edab4d2cd18b9b7da282c2d6c3d2144764.svg)](https://buildkite.com/droneflow/uorb-codec-ci)
 
 ## What is uORB
 [uORB is a publish/subscribe message bus](https://dev.px4.io/en/middleware/uorb.html)
