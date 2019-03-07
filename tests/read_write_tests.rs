@@ -1,28 +1,25 @@
 extern crate uorb_codec;
 
-mod test_shared;
+pub mod test_shared;
 
 
-
-
-#[cfg(test)]
 mod test_read_write {
     use crate::test_shared;
-    use uorb_codec::common::{UorbMessage, VehicleGpsPositionData, VehicleStatusData };
+    use uorb_codec::common::{UorbMessage, VehicleStatusData };
     use uorb_codec::UorbMsgMeta;
-
 
     #[test]
     pub fn test_verify_msg_hashcodes() {
         let msg_data = test_shared::get_vehicle_gps_position();
-        assert_eq!(VehicleGpsPositionData::MSG_HASH_CODE, 38928);
+        assert_eq!(msg_data.get_hash_code(),  38928);
     }
 
     #[test]
     pub fn test_wrapping_msg_data() {
         let msg_data = test_shared::get_vehicle_gps_position();
-        let (hdr, msg) = msg_data.gen_ready_pair(55, 666);
-        assert_eq!(hdr.instance_id,55);
+        let (hdr, _msg) = msg_data.gen_ready_pair(55, 666);
+        assert_eq!(hdr.instance_id, 55);
+        assert_eq!(hdr.timestamp, 666);
     }
 
     #[test]

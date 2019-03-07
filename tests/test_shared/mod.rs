@@ -78,7 +78,7 @@ pub fn get_sensor_gyro() -> SensorGyroData {
 
     SensorGyroData {
         device_id: 6887,
-        timestamp: 0x1ed59200230008, //0x1ed592,
+        timestamp: 0x1ed59200230008,
         error_count: 0,
         x: xgyro,
         y: ygyro,

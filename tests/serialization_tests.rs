@@ -1,10 +1,9 @@
 
 extern crate uorb_codec;
 
-mod test_shared;
+pub mod test_shared;
 
 
-#[cfg(test)]
 mod test_serialization {
     use crate::test_shared;
     use uorb_codec::common::*;
